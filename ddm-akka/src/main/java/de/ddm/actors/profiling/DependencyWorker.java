@@ -235,6 +235,7 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
                 .onMessage(TaskMessage.class, this::handle)
                 .onMessage(DependencyMiner.RequestColumnValues.class, this::handle)
                 .onMessage(DependencyMiner.CheckIndTask.class, this::handle)
+                .onMessage(DependencyMiner.InstallColumnValues.class, this::handle)
                 .build();
     }
 
@@ -281,6 +282,28 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
         this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(out, m.getMinerProxy()));
         return this;
     }
+
+    private Behavior<Message> handle(DependencyMiner.InstallColumnValues m) {
+        var key = new ColKey(m.getFileId(), m.getColumnIndex());
+        java.util.HashSet<String> set = new java.util.HashSet<>(
+                Math.max(16, (m.getValues() == null ? 0 : m.getValues().length))
+        );
+        if (m.getValues() != null) {
+            for (String v : m.getValues()) {
+                if (v == null) continue;
+                v = v.trim();
+                if (!v.isEmpty()) set.add(v);
+            }
+        }
+        // Overwrite local set with the full merged set
+        colSets.put(key, set);
+        this.getContext().getLog().info(
+                "Installed full values for column {}:{} on this worker ({} uniques).",
+                m.getFileId(), m.getColumnIndex(), set.size()
+        );
+        return this;
+    }
+
 //    private Behavior<Message> handle(DependencyMiner.CheckIndTask task) {
 //        // left ⊆ right ? Left values are local, right values arrive embedded
 //        var leftKey = new ColKey(task.getLeftFile(), task.getLeftCol());

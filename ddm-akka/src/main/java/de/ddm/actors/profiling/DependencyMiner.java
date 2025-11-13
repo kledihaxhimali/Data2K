@@ -545,10 +545,19 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private final ActorRef<LargeMessageProxy.Message> largeMessageProxy;
     private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
     private static final int CHUNK_SIZE = 8_192;
+    private final Map<ActorRef<DependencyWorker.Message>, ActorRef<LargeMessageProxy.Message>> workerProxies =
+            new HashMap<>();
+
 
     private static class ColumnCursor {
         final int fileId; final int columnIndex; int seqNo = 0; String[] buffer= new String[CHUNK_SIZE]; int fill = 0;
         ColumnCursor(int fileId,int columnIndex){this.fileId=fileId;this.columnIndex=columnIndex;}
+    }
+
+    @Getter @NoArgsConstructor @AllArgsConstructor
+    public static class InstallColumnValues implements Message, DependencyWorker.Message {
+        private static final long serialVersionUID = 6L;
+        int fileId; int columnIndex; String[] values;
     }
 
     private final List<List<ColumnCursor>> cursorsByFile;
@@ -558,13 +567,22 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private boolean startedReading = false;
     private final Deque<ActorRef<DependencyWorker.Message>> idleWorkers = new ArrayDeque<>();
     private long totalProduced = 0, totalDispatched = 0;
-    private final Map<ActorRef<DependencyWorker.Message>, ActorRef<LargeMessageProxy.Message>> workerProxies = new HashMap<>();
 
+    // Columns can be processed by multiple workers while streaming
+    private final Map<ColKey, java.util.Set<ActorRef<DependencyWorker.Message>>> owners = new java.util.HashMap<>();
     // === IND orchestration state ===
     private boolean finishingTriggered = false;
-    private final Map<ColKey,String[]> columnValues = new HashMap<>();
-    private int pendingValueExports = 0;
+    // Full, merged values per column (in miner)
+    private final Map<ColKey, java.util.Set<String>> columnValueSets = new java.util.HashMap<>();
+    // Arrays per column, used as rightValues for IND checks
+    private final Map<ColKey,String[]> columnValues = new java.util.HashMap<>();
+    // How many RequestColumnValues replies still expected (across all workers/columns)
+    private long pendingValueExports = 0;
+    // How many IND checks are still in flight
     private long pendingChecks = 0;
+    // Canonical owner per column AFTER merging — this is where IND checks will run
+    private final Map<ColKey, ActorRef<DependencyWorker.Message>> canonicalOwners = new java.util.HashMap<>();
+
 
     ////////////////////
     // Actor Behavior //
@@ -651,13 +669,31 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
     private Behavior<Message> handle(ColumnValuesMessage m) {
         ColKey key = new ColKey(m.getFileId(), m.getColumnIndex());
-        this.columnValues.put(key, m.getDistinctValues());
+        java.util.Set<String> set =
+                columnValueSets.computeIfAbsent(key, k -> new java.util.HashSet<>());
+
+        String[] vals = m.getDistinctValues();
+        if (vals != null) {
+            for (String v : vals) {
+                if (v == null) continue;
+                v = v.trim();
+                if (!v.isEmpty())
+                    set.add(v);
+            }
+        }
+
         pendingValueExports--;
-        this.getContext().getLog().info("Received values for {} ({} uniques). pendingExports={}",
-                key, (m.getDistinctValues()==null?0:m.getDistinctValues().length), pendingValueExports);
-        if (pendingValueExports == 0) dispatchIndChecks();
+        this.getContext().getLog().info(
+                "Received values for {} (now {} uniques). pendingExports={}",
+                key, set.size(), pendingValueExports
+        );
+
+        if (pendingValueExports == 0) {
+            redistributeColumnsToCanonicalOwnersAndDispatchIndChecks();
+        }
         return this;
     }
+
 
     private Behavior<Message> handle(IndCheckResult m) {
         if (m.isHolds()) {
@@ -683,11 +719,14 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private Behavior<Message> handle(Terminated signal) {
         ActorRef<DependencyWorker.Message> dead = signal.getRef().unsafeUpcast();
         this.dependencyWorkers.remove(dead);
-        owner.entrySet().removeIf(e -> e.getValue().equals(dead));
+        // Remove dead worker from all owners sets
+        owners.values().forEach(set -> set.remove(dead));
+        owners.entrySet().removeIf(e -> e.getValue().isEmpty());
         if (!this.idleWorkers.isEmpty() && !this.chunkQueue.isEmpty())
             sendNextChunkTo(this.idleWorkers.pollFirst());
         return this;
     }
+
 
     /////////////////////////
     // Partitioning helpers //
@@ -723,24 +762,31 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private boolean sendNextChunkTo(ActorRef<DependencyWorker.Message> worker) {
         PartitionChunk picked = null;
         boolean claimedNow = false;
+        boolean steal = false;
 
-        // Single pass: honor affinity, no stealing that changes owners
+        // Pass 1: honor affinity (column already owned by worker, or unowned)
         Iterator<PartitionChunk> it = this.chunkQueue.iterator();
         while (it.hasNext()) {
             PartitionChunk ch = it.next();
             ColKey key = new ColKey(ch.getFileId(), ch.getColumnIndex());
-            ActorRef<DependencyWorker.Message> w = owner.get(key);
 
-            // Clean up stale owners
-            if (w != null && !this.dependencyWorkers.contains(w)) {
-                owner.remove(key);
-                w = null;
+            java.util.Set<ActorRef<DependencyWorker.Message>> ws = owners.get(key);
+            if (ws != null) {
+                // Clean out any workers that have died
+                ws.removeIf(w -> !this.dependencyWorkers.contains(w));
+                if (ws.isEmpty()) {
+                    owners.remove(key);
+                    ws = null;
+                }
             }
 
-            // Either unclaimed column or already owned by this worker
-            if (w == null || w.equals(worker)) {
-                if (w == null) {
-                    owner.put(key, worker);
+            if (ws == null || ws.contains(worker)) {
+                if (ws == null) {
+                    ws = new java.util.HashSet<>();
+                    owners.put(key, ws);
+                }
+                // worker may be a new owner
+                if (ws.add(worker)) {
                     claimedNow = true;
                 }
                 picked = ch;
@@ -749,8 +795,21 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
             }
         }
 
+        // Pass 2: allow stealing when all input is read but chunks remain
+        if (picked == null && allFilesDone() && !this.chunkQueue.isEmpty()) {
+            it = this.chunkQueue.iterator();
+            if (it.hasNext()) {
+                PartitionChunk ch = it.next();
+                it.remove();
+                ColKey key = new ColKey(ch.getFileId(), ch.getColumnIndex());
+                java.util.Set<ActorRef<DependencyWorker.Message>> ws =
+                        owners.computeIfAbsent(key, k -> new java.util.HashSet<>());
+                steal = ws.add(worker); // worker becomes additional owner
+                picked = ch;
+            }
+        }
+
         if (picked == null) {
-            // No work suitable for this worker at the moment
             this.idleWorkers.addLast(worker);
             return false;
         }
@@ -761,13 +820,14 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         this.totalDispatched++;
 
         this.getContext().getLog().info(
-                "DISPATCH -> worker={} chunk=[id={} file={} col={} seq={} rows={}] claim={} produced={} dispatched={} remaining={}",
+                "DISPATCH -> worker={} chunk=[id={} file={} col={} seq={} rows={}] claim={} steal={} produced={} dispatched={} remaining={}",
                 worker, picked.getTaskId(), picked.getFileId(), picked.getColumnIndex(), picked.getSeqNo(),
-                (picked.getValues() == null ? 0 : picked.getValues().length),
-                claimedNow, this.totalProduced, this.totalDispatched, this.chunkQueue.size()
+                (picked.getValues()==null?0:picked.getValues().length),
+                claimedNow, steal, this.totalProduced, this.totalDispatched, this.chunkQueue.size()
         );
         return true;
     }
+
 
 
     private void startReading() {
@@ -786,49 +846,75 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     /////////////////////////////
 
     private void startCollectingColumnValues() {
-        if (pendingValueExports > 0 || !columnValues.isEmpty()) return; // already collecting/collected
+        if (pendingValueExports > 0 || !columnValueSets.isEmpty())
+            return; // already collecting or collected
+
         // Collect all columns seen in headers
-        List<ColKey> columns = new ArrayList<>();
+        java.util.List<ColKey> columns = new java.util.ArrayList<>();
         for (int f = 0; f < headerLines.length; f++) {
-            String[] hdr = headerLines[f]; if (hdr == null) continue;
-            for (int c = 0; c < hdr.length; c++) columns.add(new ColKey(f,c));
+            String[] hdr = headerLines[f];
+            if (hdr == null) continue;
+            for (int c = 0; c < hdr.length; c++)
+                columns.add(new ColKey(f, c));
         }
-        pendingValueExports = columns.size();
-        this.getContext().getLog().info("Requesting column values for {} columns.", pendingValueExports);
+
+        // For each column, ask ALL workers that own it for their partial values
         for (ColKey k : columns) {
-            ActorRef<DependencyWorker.Message> w = owner.get(k);
-            if (w == null) { // column might be empty/not streamed
-                this.columnValues.put(k, new String[0]);
-                pendingValueExports--; continue;
+            java.util.Set<ActorRef<DependencyWorker.Message>> ws = owners.get(k);
+            if (ws == null || ws.isEmpty()) {
+                // Column might be empty / never streamed; treat as empty set
+                columnValueSets.putIfAbsent(k, new java.util.HashSet<>());
+                continue;
             }
-            RequestColumnValues req = new RequestColumnValues(k.f, k.c, this.largeMessageProxy);
-            this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(req, this.workerProxies.get(w)));
+            for (ActorRef<DependencyWorker.Message> w : ws) {
+                pendingValueExports++;
+                RequestColumnValues req = new RequestColumnValues(k.f, k.c, this.largeMessageProxy);
+                this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(req, this.workerProxies.get(w)));
+            }
         }
-        if (pendingValueExports == 0) dispatchIndChecks();
+
+        if (pendingValueExports == 0) {
+            // No one had any data; still need to move on to IND checks (will find none)
+            redistributeColumnsToCanonicalOwnersAndDispatchIndChecks();
+        } else {
+            this.getContext().getLog().info(
+                    "Requesting column values from {} worker-column combinations.",
+                    pendingValueExports
+            );
+        }
     }
+
 
     private void dispatchIndChecks() {
         java.util.List<ColKey> cols = new java.util.ArrayList<>(columnValues.keySet());
-        long checks = 0;
+        long checks = 0L;
 
         for (int i = 0; i < cols.size(); i++) {
             ColKey a = cols.get(i);
+            String[] leftArr = columnValues.get(a);
+            if (leftArr == null || leftArr.length == 0) continue; // empty dependent set
+
+            ActorRef<DependencyWorker.Message> w = canonicalOwners.get(a);
+            if (w == null) continue; // no worker to host this column
+
+            ActorRef<LargeMessageProxy.Message> workerProxy = this.workerProxies.get(w);
+
             for (int j = 0; j < cols.size(); j++) {
-                if (i == j) continue; // skip self
+                if (i == j) continue; // skip A ⊆ A
                 ColKey b = cols.get(j);
-                // Owner of A performs A ⊆ B (left is local on that worker)
-                ActorRef<DependencyWorker.Message> w = owner.get(a);
-                if (w == null) continue;
-                String[] rightValues = columnValues.get(b); // send B's values
-                CheckIndTask task = new CheckIndTask(a.f, a.c, b.f, b.c, rightValues, this.largeMessageProxy);
-                this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(task, this.workerProxies.get(w)));
+                String[] rightArr = columnValues.get(b);
+                if (rightArr == null || rightArr.length == 0) continue; // empty reference
+
+                CheckIndTask task = new CheckIndTask(a.f, a.c, b.f, b.c, rightArr, this.largeMessageProxy);
+                this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(task, workerProxy));
                 checks++;
             }
         }
         pendingChecks = checks;
-        this.getContext().getLog().info("Dispatched {} IND checks.", pendingChecks);
+        this.getContext().getLog().info("Dispatched {} IND checks to workers.", pendingChecks);
         if (pendingChecks == 0) finalizeRun();
     }
+
 
     private InclusionDependency toIND(int leftFile, int leftCol, int rightFile, int rightCol) {
         java.io.File depFile = this.inputFiles[leftFile];
@@ -839,4 +925,37 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
                 ? this.headerLines[rightFile][rightCol] : "col" + rightCol;
         return new InclusionDependency(depFile, new String[]{depAttr}, refFile, new String[]{refAttr});
     }
+
+    private void redistributeColumnsToCanonicalOwnersAndDispatchIndChecks() {
+        // Decide a canonical owner per column and send it the full set
+        for (var e : columnValueSets.entrySet()) {
+            ColKey k = e.getKey();
+            java.util.Set<String> set = e.getValue();
+
+            // Decide canonical owner: just pick the first current owner if any
+            java.util.Set<ActorRef<DependencyWorker.Message>> ws = owners.get(k);
+            if (ws == null || ws.isEmpty()) {
+                // No worker had values; skip
+                continue;
+            }
+            ActorRef<DependencyWorker.Message> canonical = ws.iterator().next();
+            canonicalOwners.put(k, canonical);
+
+            // materialize to array and remember for shipping as rightValues
+            String[] full = set.toArray(new String[0]);
+            columnValues.put(k, full);
+
+            ActorRef<LargeMessageProxy.Message> proxy = this.workerProxies.get(canonical);
+            InstallColumnValues msg = new InstallColumnValues(k.f, k.c, full);
+            this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(msg, proxy));
+        }
+
+        this.getContext().getLog().info(
+                "Installed full column values on canonical workers for {} columns. Starting IND checks...",
+                canonicalOwners.size()
+        );
+
+        dispatchIndChecks();
+    }
+
 }
