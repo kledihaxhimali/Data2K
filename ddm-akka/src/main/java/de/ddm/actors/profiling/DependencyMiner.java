@@ -721,43 +721,54 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     }
 
     private boolean sendNextChunkTo(ActorRef<DependencyWorker.Message> worker) {
-        PartitionChunk picked = null; boolean claimedNow = false; boolean steal = false;
-        // Pass 1: honor affinity
+        PartitionChunk picked = null;
+        boolean claimedNow = false;
+
+        // Single pass: honor affinity, no stealing that changes owners
         Iterator<PartitionChunk> it = this.chunkQueue.iterator();
         while (it.hasNext()) {
             PartitionChunk ch = it.next();
             ColKey key = new ColKey(ch.getFileId(), ch.getColumnIndex());
             ActorRef<DependencyWorker.Message> w = owner.get(key);
-            if (w != null && !this.dependencyWorkers.contains(w)) { owner.remove(key); w = null; }
+
+            // Clean up stale owners
+            if (w != null && !this.dependencyWorkers.contains(w)) {
+                owner.remove(key);
+                w = null;
+            }
+
+            // Either unclaimed column or already owned by this worker
             if (w == null || w.equals(worker)) {
-                if (w == null) { owner.put(key, worker); claimedNow = true; }
-                picked = ch; it.remove(); break;
-            }
-        }
-        // Pass 2: allow reassignment (steal) if everything produced
-        if (picked == null && allFilesDone() && !this.chunkQueue.isEmpty()) {
-            it = this.chunkQueue.iterator();
-            if (it.hasNext()) {
-                PartitionChunk ch = it.next(); it.remove();
-                ColKey key = new ColKey(ch.getFileId(), ch.getColumnIndex());
-                owner.put(key, worker);
+                if (w == null) {
+                    owner.put(key, worker);
+                    claimedNow = true;
+                }
                 picked = ch;
-                steal = true;
+                it.remove();
+                break;
             }
         }
-        if (picked == null) { this.idleWorkers.addLast(worker); return false; }
+
+        if (picked == null) {
+            // No work suitable for this worker at the moment
+            this.idleWorkers.addLast(worker);
+            return false;
+        }
+
         ActorRef<LargeMessageProxy.Message> workerProxy = this.workerProxies.get(worker);
         DependencyWorker.TaskMessage payload = new DependencyWorker.TaskMessage(this.largeMessageProxy, picked);
         this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(payload, workerProxy));
         this.totalDispatched++;
+
         this.getContext().getLog().info(
-                "DISPATCH -> worker={} chunk=[id={} file={} col={} seq={} rows={}] claim={} steal={} produced={} dispatched={} remaining={}",
+                "DISPATCH -> worker={} chunk=[id={} file={} col={} seq={} rows={}] claim={} produced={} dispatched={} remaining={}",
                 worker, picked.getTaskId(), picked.getFileId(), picked.getColumnIndex(), picked.getSeqNo(),
-                (picked.getValues()==null?0:picked.getValues().length),
-                claimedNow, steal, this.totalProduced, this.totalDispatched, this.chunkQueue.size()
+                (picked.getValues() == null ? 0 : picked.getValues().length),
+                claimedNow, this.totalProduced, this.totalDispatched, this.chunkQueue.size()
         );
         return true;
     }
+
 
     private void startReading() {
         if (startedReading) return;
