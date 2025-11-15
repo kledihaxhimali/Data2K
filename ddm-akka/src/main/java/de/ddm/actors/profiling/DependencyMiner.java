@@ -140,7 +140,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
     private static final int CHUNK_SIZE = 8_192;
     private final Map<ActorRef<DependencyWorker.Message>, ActorRef<LargeMessageProxy.Message>> workerProxies = new HashMap<>();
-    
+
     private static class ColumnCursor {
         final int fileId; final int columnIndex; int seqNo = 0; String[] buffer= new String[CHUNK_SIZE]; int fill = 0;
         ColumnCursor(int fileId,int columnIndex){this.fileId=fileId;this.columnIndex=columnIndex;}
