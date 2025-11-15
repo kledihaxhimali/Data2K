@@ -17,7 +17,6 @@ import de.ddm.structures.InclusionDependency;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
 import java.io.File;
 import java.util.*;
 
@@ -63,7 +62,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         long taskId; int fileId; int columnIndex; int seqNo; String[] values;
     }
 
-    // === IND collection / orchestration messages ===
     @Getter @NoArgsConstructor @AllArgsConstructor
     public static class RequestColumnValues implements Message, DependencyWorker.Message {
         private static final long serialVersionUID = 2L;
@@ -141,10 +139,8 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private final ActorRef<LargeMessageProxy.Message> largeMessageProxy;
     private final List<ActorRef<DependencyWorker.Message>> dependencyWorkers;
     private static final int CHUNK_SIZE = 8_192;
-    private final Map<ActorRef<DependencyWorker.Message>, ActorRef<LargeMessageProxy.Message>> workerProxies =
-            new HashMap<>();
-
-
+    private final Map<ActorRef<DependencyWorker.Message>, ActorRef<LargeMessageProxy.Message>> workerProxies = new HashMap<>();
+    
     private static class ColumnCursor {
         final int fileId; final int columnIndex; int seqNo = 0; String[] buffer= new String[CHUNK_SIZE]; int fill = 0;
         ColumnCursor(int fileId,int columnIndex){this.fileId=fileId;this.columnIndex=columnIndex;}
@@ -171,7 +167,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private long pendingValueExports = 0;
     private long pendingChecks = 0;
     private final Map<ColKey, ActorRef<DependencyWorker.Message>> canonicalOwners = new java.util.HashMap<>();
-
 
     ////////////////////
     // Actor Behavior //
@@ -212,14 +207,11 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         final int fileId = message.getId();
         final List<String[]> rows = message.getBatch();
         if (rows.isEmpty()) {
-            this.getContext().getLog().info("File {} finished reading batches. Flushing remaining data...", fileId);
             this.fileDone[fileId] = true;
             flushAllCursorsOfFile(fileId);
             tryFinalizeOrStartInd();
             return this;
         }
-        if (nextChunkId % 50 == 0)
-            this.getContext().getLog().info("Miner working... processed {} chunks so far.", nextChunkId);
         final List<ColumnCursor> cursors = this.cursorsByFile.get(fileId);
         if (cursors.isEmpty() && this.headerLines[fileId] != null)
             for (int c = 0; c < this.headerLines[fileId].length; c++) cursors.add(new ColumnCursor(fileId,c));
@@ -344,7 +336,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         while (it.hasNext()) {
             PartitionChunk ch = it.next();
             ColKey key = new ColKey(ch.getFileId(), ch.getColumnIndex());
-
             java.util.Set<ActorRef<DependencyWorker.Message>> ws = owners.get(key);
             if (ws != null) {
                 ws.removeIf(w -> !this.dependencyWorkers.contains(w));
@@ -353,7 +344,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
                     ws = null;
                 }
             }
-
             if (ws == null || ws.contains(worker)) {
                 if (ws == null) {
                     ws = new java.util.HashSet<>();
@@ -407,7 +397,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private void startCollectingColumnValues() {
         if (pendingValueExports > 0 || !columnValueSets.isEmpty())
             return;
-
         java.util.List<ColKey> columns = new java.util.ArrayList<>();
         for (int f = 0; f < headerLines.length; f++) {
             String[] hdr = headerLines[f];
@@ -415,7 +404,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
             for (int c = 0; c < hdr.length; c++)
                 columns.add(new ColKey(f, c));
         }
-
         for (ColKey k : columns) {
             java.util.Set<ActorRef<DependencyWorker.Message>> ws = owners.get(k);
             if (ws == null || ws.isEmpty()) {
@@ -428,30 +416,27 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
                 this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(req, this.workerProxies.get(w)));
             }
         }
-
         if (pendingValueExports == 0) {
             redistributeColumnsToCanonicalOwnersAndDispatchIndChecks();
-        } else {
-            this.getContext().getLog().info(
-                    "Requesting column values from {} worker-column combinations.",
-                    pendingValueExports
-            );
         }
+//        else {
+//            this.getContext().getLog().info(
+//                    "Requesting column values from {} worker-column combinations.",
+//                    pendingValueExports
+//            );
+//        }
     }
 
     private void dispatchIndChecks() {
         java.util.List<ColKey> cols = new java.util.ArrayList<>(columnValues.keySet());
         long checks = 0L;
-
         for (int i = 0; i < cols.size(); i++) {
             ColKey a = cols.get(i);
             String[] leftArr = columnValues.get(a);
             if (leftArr == null || leftArr.length == 0) continue;
             ActorRef<DependencyWorker.Message> w = canonicalOwners.get(a);
             if (w == null) continue;
-
             ActorRef<LargeMessageProxy.Message> workerProxy = this.workerProxies.get(w);
-
             for (int j = 0; j < cols.size(); j++) {
                 if (i == j) continue;
                 ColKey b = cols.get(j);
@@ -495,7 +480,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
             InstallColumnValues msg = new InstallColumnValues(k.f, k.c, full);
             this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(msg, proxy));
         }
-
         this.getContext().getLog().info(
                 "Installed full column values on canonical workers for {} columns. Starting IND checks...",
                 canonicalOwners.size()
