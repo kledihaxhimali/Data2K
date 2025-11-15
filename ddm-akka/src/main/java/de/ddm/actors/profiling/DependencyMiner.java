@@ -206,6 +206,9 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private Behavior<Message> handle(BatchMessage message) {
         final int fileId = message.getId();
         final List<String[]> rows = message.getBatch();
+        this.getContext().getLog().info(
+                "BATCH file={} size={}", fileId, rows.size()
+        );
         if (rows.isEmpty()) {
             this.fileDone[fileId] = true;
             flushAllCursorsOfFile(fileId);
@@ -305,6 +308,11 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         final long id = nextChunkId++;
         final PartitionChunk chunk = new PartitionChunk(id, cur.fileId, cur.columnIndex, cur.seqNo++, payload);
         this.chunkQueue.addLast(chunk); this.totalProduced++;
+        this.getContext().getLog().info(
+                "ENQUEUE chunk id={} file={} col={} seq={} rows={}",
+                id, cur.fileId, cur.columnIndex, chunk.getSeqNo(),
+                payload.length
+        );
         if (!this.idleWorkers.isEmpty()) sendNextChunkTo(this.idleWorkers.pollFirst());
         cur.fill = 0;
     }
@@ -378,6 +386,12 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
         ActorRef<LargeMessageProxy.Message> workerProxy = this.workerProxies.get(worker);
         DependencyWorker.TaskMessage payload = new DependencyWorker.TaskMessage(this.largeMessageProxy, picked);
+        this.getContext().getLog().info(
+                "DISPATCH -> worker={} file={} col={} seq={} rows={}",
+                worker, picked.getFileId(), picked.getColumnIndex(),
+                picked.getSeqNo(),
+                picked.getValues() != null ? picked.getValues().length : 0
+        );
         this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(payload, workerProxy));
         this.totalDispatched++;
         return true;

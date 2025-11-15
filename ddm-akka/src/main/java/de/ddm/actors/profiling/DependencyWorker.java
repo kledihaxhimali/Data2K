@@ -98,6 +98,12 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
     private Behavior<Message> handle(TaskMessage message) {
         if (message.getChunk() != null) {
             var ch  = message.getChunk();
+            this.getContext().getLog().info(
+                    "WORKER {} processing chunk file={} col={} seq={} rows={}",
+                    this.getContext().getSelf(),
+                    ch.getFileId(), ch.getColumnIndex(), ch.getSeqNo(),
+                    ch.getValues() != null ? ch.getValues().length : 0
+            );
             var key = new ColKey(ch.getFileId(), ch.getColumnIndex());
             var set = colSets.computeIfAbsent(key, k -> new java.util.HashSet<>(8192));
             String[] vals = ch.getValues();
