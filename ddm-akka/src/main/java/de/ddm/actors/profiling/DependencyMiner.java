@@ -167,6 +167,8 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private long pendingValueExports = 0;
     private long pendingChecks = 0;
     private final Map<ColKey, ActorRef<DependencyWorker.Message>> canonicalOwners = new java.util.HashMap<>();
+    private final Map<ColKey, String[]> columnSamples = new java.util.HashMap<>();
+    private static final int SAMPLE_SIZE = 64;
 
     ////////////////////
     // Actor Behavior //
@@ -415,28 +417,87 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         }
     }
 
+//    private void dispatchIndChecks() {
+//        java.util.List<ColKey> cols = new java.util.ArrayList<>(columnValues.keySet());
+//        long checks = 0L;
+//        for (int i = 0; i < cols.size(); i++) {
+//            ColKey a = cols.get(i);
+//            String[] leftArr = columnValues.get(a);
+//            if (leftArr == null || leftArr.length == 0) continue;
+//            ActorRef<DependencyWorker.Message> w = canonicalOwners.get(a);
+//            if (w == null) continue;
+//            ActorRef<LargeMessageProxy.Message> workerProxy = this.workerProxies.get(w);
+//            for (int j = 0; j < cols.size(); j++) {
+//                if (i == j) continue;
+//                ColKey b = cols.get(j);
+//                String[] rightArr = columnValues.get(b);
+//                if (rightArr == null || rightArr.length == 0) continue;
+//                if (leftArr.length > rightArr.length)
+//                    continue;
+//                CheckIndTask task = new CheckIndTask(a.f, a.c, b.f, b.c, rightArr, this.largeMessageProxy);
+//                this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(task, workerProxy));
+//                checks++;
+//            }
+//        }
+//        pendingChecks = checks;
+//        this.getContext().getLog().info("Dispatched {} IND checks to workers.", pendingChecks);
+//        if (pendingChecks == 0) finalizeRun();
+//    }
+
     private void dispatchIndChecks() {
         java.util.List<ColKey> cols = new java.util.ArrayList<>(columnValues.keySet());
         long checks = 0L;
+
         for (int i = 0; i < cols.size(); i++) {
             ColKey a = cols.get(i);
             String[] leftArr = columnValues.get(a);
             if (leftArr == null || leftArr.length == 0) continue;
+
             ActorRef<DependencyWorker.Message> w = canonicalOwners.get(a);
             if (w == null) continue;
             ActorRef<LargeMessageProxy.Message> workerProxy = this.workerProxies.get(w);
+
+            java.util.Set<String> leftSet = columnValueSets.get(a);
+            int leftSize = (leftSet != null) ? leftSet.size() : leftArr.length;
+
             for (int j = 0; j < cols.size(); j++) {
                 if (i == j) continue;
                 ColKey b = cols.get(j);
+
                 String[] rightArr = columnValues.get(b);
                 if (rightArr == null || rightArr.length == 0) continue;
-                if (leftArr.length > rightArr.length)
-                    continue;
+
+                java.util.Set<String> rightSet = columnValueSets.get(b);
+                int rightSize = (rightSet != null) ? rightSet.size() : rightArr.length;
+
+                // hard cardinality pruning
+                if (leftSize > rightSize) continue;
+
+                // --- NEW: sample-based negative filter ---
+                String[] leftSample = columnSamples.get(a);
+                if (leftSample != null && rightSet != null) {
+                    boolean impossible = false;
+                    int limit = Math.min(leftSample.length, SAMPLE_SIZE);
+                    for (int s = 0; s < limit; s++) {
+                        String v = leftSample[s];
+                        if (!rightSet.contains(v)) {
+                            // We found a value in A that's definitely not in B => A ⊄ B
+                            impossible = true;
+                            break;
+                        }
+                    }
+                    if (impossible) {
+                        continue; // skip this pair entirely
+                    }
+                }
+
+                // still possible => send full check to worker
                 CheckIndTask task = new CheckIndTask(a.f, a.c, b.f, b.c, rightArr, this.largeMessageProxy);
                 this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(task, workerProxy));
                 checks++;
             }
         }
+
         pendingChecks = checks;
         this.getContext().getLog().info("Dispatched {} IND checks to workers.", pendingChecks);
         if (pendingChecks == 0) finalizeRun();
@@ -452,6 +513,24 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         return new InclusionDependency(depFile, new String[]{depAttr}, refFile, new String[]{refAttr});
     }
 
+//    private void redistributeColumnsToCanonicalOwnersAndDispatchIndChecks() {
+//        for (var e : columnValueSets.entrySet()) {
+//            ColKey k = e.getKey();
+//            java.util.Set<String> set = e.getValue();
+//            java.util.Set<ActorRef<DependencyWorker.Message>> ws = owners.get(k);
+//            if (ws == null || ws.isEmpty()) {
+//                continue;
+//            }
+//            ActorRef<DependencyWorker.Message> canonical = ws.iterator().next();
+//            canonicalOwners.put(k, canonical);
+//            String[] full = set.toArray(new String[0]);
+//            columnValues.put(k, full);
+//            ActorRef<LargeMessageProxy.Message> proxy = this.workerProxies.get(canonical);
+//            InstallColumnValues msg = new InstallColumnValues(k.f, k.c, full);
+//            this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(msg, proxy));
+//        }
+//        dispatchIndChecks();
+//    }
     private void redistributeColumnsToCanonicalOwnersAndDispatchIndChecks() {
         for (var e : columnValueSets.entrySet()) {
             ColKey k = e.getKey();
@@ -462,12 +541,27 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
             }
             ActorRef<DependencyWorker.Message> canonical = ws.iterator().next();
             canonicalOwners.put(k, canonical);
+
             String[] full = set.toArray(new String[0]);
             columnValues.put(k, full);
+
+            // --- NEW: store a small sample of values for cheap pruning ---
+            int sampleLen = Math.min(SAMPLE_SIZE, full.length);
+            if (sampleLen > 0) {
+                String[] sample = new String[sampleLen];
+                System.arraycopy(full, 0, sample, 0, sampleLen);
+                columnSamples.put(k, sample);
+            }
+
             ActorRef<LargeMessageProxy.Message> proxy = this.workerProxies.get(canonical);
             InstallColumnValues msg = new InstallColumnValues(k.f, k.c, full);
             this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(msg, proxy));
         }
+        this.getContext().getLog().info(
+                "Installed full column values on canonical workers for {} columns. Starting IND checks...",
+                canonicalOwners.size()
+        );
         dispatchIndChecks();
     }
+
 }
