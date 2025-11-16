@@ -98,12 +98,6 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
     private Behavior<Message> handle(TaskMessage message) {
         if (message.getChunk() != null) {
             var ch  = message.getChunk();
-//            this.getContext().getLog().info(
-//                    "WORKER {} processing chunk file={} col={} seq={} rows={}",
-//                    this.getContext().getSelf(),
-//                    ch.getFileId(), ch.getColumnIndex(), ch.getSeqNo(),
-//                    ch.getValues() != null ? ch.getValues().length : 0
-//            );
             var key = new ColKey(ch.getFileId(), ch.getColumnIndex());
             var set = colSets.computeIfAbsent(key, k -> new java.util.HashSet<>(8192));
             String[] vals = ch.getValues();
@@ -206,12 +200,11 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 
     private Behavior<Message> handle(DependencyMiner.CheckIndTask task) {
         var leftKey  = new ColKey(task.getLeftFile(),  task.getLeftCol());
-        var left     = colSets.get(leftKey);          // full set installed by InstallColumnValues
-        String[] rightValues = task.getRightValues(); // full values for the right column
+        var left     = colSets.get(leftKey);
+        String[] rightValues = task.getRightValues();
 
         boolean holds;
 
-        // --- basic sanity checks ---
         if (left == null || left.isEmpty()) {
             this.getContext().getLog().warn(
                     "Dependent column values are empty. Validation failed. left={}:{}",
@@ -228,17 +221,14 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
         }
         else if (task.getLeftFile() == task.getRightFile()
                 && task.getLeftCol() == task.getRightCol()) {
-            // same column: skip (we don't want A ⊆ A)
             holds = false;
         }
-        // if dep has more distinct values than ref, subset can't hold
         else if (left.size() > rightValues.length) {
             holds = false;
         }
         else {
-            // --- build right set ONCE for this task (no caching) ---
-            // we assume rightValues is already distinct + trimmed + non-empty
-            int expectedSize = rightValues.length * 2; // rough over-allocation to avoid rehashing
+
+            int expectedSize = rightValues.length * 2;
             java.util.HashSet<String> right = new java.util.HashSet<>(expectedSize);
 
             for (String v : rightValues) {
@@ -247,7 +237,6 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
                 }
             }
 
-            // --- core idea: check if left ⊆ right ---
             holds = true;
             for (String v : left) {
                 if (!right.contains(v)) {

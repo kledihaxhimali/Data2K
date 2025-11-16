@@ -193,8 +193,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     }
 
     private Behavior<Message> handle(HeaderMessage message) {
-        this.getContext().getLog().info("Header received for file {} with {} columns.",
-                message.getId(), message.getHeader()!=null?message.getHeader().length:0);
         this.headerLines[message.getId()] = message.getHeader();
         final int fileId = message.getId();
         this.cursorsByFile.get(fileId).clear();
@@ -206,9 +204,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private Behavior<Message> handle(BatchMessage message) {
         final int fileId = message.getId();
         final List<String[]> rows = message.getBatch();
-        this.getContext().getLog().info(
-                "BATCH file={} size={}", fileId, rows.size()
-        );
         if (rows.isEmpty()) {
             this.fileDone[fileId] = true;
             flushAllCursorsOfFile(fileId);
@@ -308,11 +303,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         final long id = nextChunkId++;
         final PartitionChunk chunk = new PartitionChunk(id, cur.fileId, cur.columnIndex, cur.seqNo++, payload);
         this.chunkQueue.addLast(chunk); this.totalProduced++;
-//        this.getContext().getLog().info(
-//                "ENQUEUE chunk id={} file={} col={} seq={} rows={}",
-//                id, cur.fileId, cur.columnIndex, chunk.getSeqNo(),
-//                payload.length
-//        );
         if (!this.idleWorkers.isEmpty()) sendNextChunkTo(this.idleWorkers.pollFirst());
         cur.fill = 0;
     }
@@ -327,10 +317,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
     private void tryFinalizeOrStartInd() {
         if (allFilesDone() && allChunksConsumed()) {
-            this.getContext().getLog().info(
-                    "Partitioning complete: produced={} dispatched={} remaining={} — starting IND collection.",
-                    this.totalProduced, this.totalDispatched, this.chunkQueue.size()
-            );
             startCollectingColumnValues();
         }
     }
@@ -386,12 +372,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
         ActorRef<LargeMessageProxy.Message> workerProxy = this.workerProxies.get(worker);
         DependencyWorker.TaskMessage payload = new DependencyWorker.TaskMessage(this.largeMessageProxy, picked);
-//        this.getContext().getLog().info(
-//                "DISPATCH -> worker={} file={} col={} seq={} rows={}",
-//                worker, picked.getFileId(), picked.getColumnIndex(),
-//                picked.getSeqNo(),
-//                picked.getValues() != null ? picked.getValues().length : 0
-//        );
         this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(payload, workerProxy));
         this.totalDispatched++;
         return true;
@@ -433,12 +413,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         if (pendingValueExports == 0) {
             redistributeColumnsToCanonicalOwnersAndDispatchIndChecks();
         }
-//        else {
-//            this.getContext().getLog().info(
-//                    "Requesting column values from {} worker-column combinations.",
-//                    pendingValueExports
-//            );
-//        }
     }
 
     private void dispatchIndChecks() {
@@ -494,10 +468,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
             InstallColumnValues msg = new InstallColumnValues(k.f, k.c, full);
             this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(msg, proxy));
         }
-        this.getContext().getLog().info(
-                "Installed full column values on canonical workers for {} columns. Starting IND checks...",
-                canonicalOwners.size()
-        );
         dispatchIndChecks();
     }
 }
