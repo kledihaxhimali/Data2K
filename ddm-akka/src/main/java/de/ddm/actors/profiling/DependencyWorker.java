@@ -98,12 +98,12 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
     private Behavior<Message> handle(TaskMessage message) {
         if (message.getChunk() != null) {
             var ch  = message.getChunk();
-            this.getContext().getLog().info(
-                    "WORKER {} processing chunk file={} col={} seq={} rows={}",
-                    this.getContext().getSelf(),
-                    ch.getFileId(), ch.getColumnIndex(), ch.getSeqNo(),
-                    ch.getValues() != null ? ch.getValues().length : 0
-            );
+//            this.getContext().getLog().info(
+//                    "WORKER {} processing chunk file={} col={} seq={} rows={}",
+//                    this.getContext().getSelf(),
+//                    ch.getFileId(), ch.getColumnIndex(), ch.getSeqNo(),
+//                    ch.getValues() != null ? ch.getValues().length : 0
+//            );
             var key = new ColKey(ch.getFileId(), ch.getColumnIndex());
             var set = colSets.computeIfAbsent(key, k -> new java.util.HashSet<>(8192));
             String[] vals = ch.getValues();
@@ -151,75 +151,29 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
         return this;
     }
 
-    private Behavior<Message> handle(DependencyMiner.CheckIndTask task) {
-        var leftKey = new ColKey(task.getLeftFile(), task.getLeftCol());
-        var left = colSets.getOrDefault(leftKey, new java.util.HashSet<String>());
-        java.util.HashSet<String> right = new java.util.HashSet<>(
-                Math.max(16, (task.getRightValues() == null ? 0 : task.getRightValues().length))
-        );
-        if (task.getRightValues() != null) {
-            for (String v : task.getRightValues()) {
-                if (v == null) continue;
-                v = v.trim();
-                if (!v.isEmpty()) right.add(v);
-            }
-        }
-        boolean holds;
-
-        if (left.isEmpty()) {
-            this.getContext().getLog().warn(
-                    "Dependent column values are empty. Validation failed. left={}:{}",
-                    task.getLeftFile(), task.getLeftCol()
-            );
-            holds = false;
-        }
-        else if (right.isEmpty()) {
-            this.getContext().getLog().warn(
-                    "Referenced column values are empty. Validation failed. right={}:{}",
-                    task.getRightFile(), task.getRightCol()
-            );
-            holds = false;
-        }
-        else if (task.getLeftFile() == task.getRightFile()
-                && task.getLeftCol() == task.getRightCol()) {
-            holds = false;
-        }
-        else {
-            holds = right.containsAll(left);
-            if (holds) {
-                this.getContext().getLog().info(
-                        "IND found: Column '{}' (fileId={}) is a subset of column '{}' (fileId={}). sizes: dep={}, ref={}",
-                        task.getLeftCol(), task.getLeftFile(), task.getRightCol(), task.getRightFile(),
-                        left.size(), right.size()
-                );
-            }
-        }
-        DependencyMiner.IndCheckResult result =
-                new DependencyMiner.IndCheckResult(
-                        task.getLeftFile(), task.getLeftCol(),
-                        task.getRightFile(), task.getRightCol(),
-                        holds
-                );
-        this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(result, task.getMinerProxy()));
-        return this;
-    }
-
 //    private Behavior<Message> handle(DependencyMiner.CheckIndTask task) {
-//        var leftKey  = new ColKey(task.getLeftFile(),  task.getLeftCol());
-//        var left     = colSets.get(leftKey);          // full set installed by InstallColumnValues
-//        String[] rightValues = task.getRightValues(); // full values for the right column
-//
+//        var leftKey = new ColKey(task.getLeftFile(), task.getLeftCol());
+//        var left = colSets.getOrDefault(leftKey, new java.util.HashSet<String>());
+//        java.util.HashSet<String> right = new java.util.HashSet<>(
+//                Math.max(16, (task.getRightValues() == null ? 0 : task.getRightValues().length))
+//        );
+//        if (task.getRightValues() != null) {
+//            for (String v : task.getRightValues()) {
+//                if (v == null) continue;
+//                v = v.trim();
+//                if (!v.isEmpty()) right.add(v);
+//            }
+//        }
 //        boolean holds;
 //
-//        // --- basic sanity checks ---
-//        if (left == null || left.isEmpty()) {
+//        if (left.isEmpty()) {
 //            this.getContext().getLog().warn(
 //                    "Dependent column values are empty. Validation failed. left={}:{}",
 //                    task.getLeftFile(), task.getLeftCol()
 //            );
 //            holds = false;
 //        }
-//        else if (rightValues == null || rightValues.length == 0) {
+//        else if (right.isEmpty()) {
 //            this.getContext().getLog().warn(
 //                    "Referenced column values are empty. Validation failed. right={}:{}",
 //                    task.getRightFile(), task.getRightCol()
@@ -228,44 +182,18 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 //        }
 //        else if (task.getLeftFile() == task.getRightFile()
 //                && task.getLeftCol() == task.getRightCol()) {
-//            // same column: skip (we don't want A ⊆ A)
-//            holds = false;
-//        }
-//        // if dep has more distinct values than ref, subset can't hold
-//        else if (left.size() > rightValues.length) {
 //            holds = false;
 //        }
 //        else {
-//            // --- build right set ONCE for this task (no caching) ---
-//            // we assume rightValues is already distinct + trimmed + non-empty
-//            int expectedSize = rightValues.length * 2; // rough over-allocation to avoid rehashing
-//            java.util.HashSet<String> right = new java.util.HashSet<>(expectedSize);
-//
-//            for (String v : rightValues) {
-//                if (v != null) {
-//                    right.add(v);
-//                }
-//            }
-//
-//            // --- core idea: check if left ⊆ right ---
-//            holds = true;
-//            for (String v : left) {
-//                if (!right.contains(v)) {
-//                    holds = false;
-//                    break;
-//                }
-//            }
-//
+//            holds = right.containsAll(left);
 //            if (holds) {
 //                this.getContext().getLog().info(
 //                        "IND found: Column '{}' (fileId={}) is a subset of column '{}' (fileId={}). sizes: dep={}, ref={}",
-//                        task.getLeftCol(), task.getLeftFile(),
-//                        task.getRightCol(), task.getRightFile(),
+//                        task.getLeftCol(), task.getLeftFile(), task.getRightCol(), task.getRightFile(),
 //                        left.size(), right.size()
 //                );
 //            }
 //        }
-//
 //        DependencyMiner.IndCheckResult result =
 //                new DependencyMiner.IndCheckResult(
 //                        task.getLeftFile(), task.getLeftCol(),
@@ -275,4 +203,76 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 //        this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(result, task.getMinerProxy()));
 //        return this;
 //    }
+
+    private Behavior<Message> handle(DependencyMiner.CheckIndTask task) {
+        var leftKey  = new ColKey(task.getLeftFile(),  task.getLeftCol());
+        var left     = colSets.get(leftKey);          // full set installed by InstallColumnValues
+        String[] rightValues = task.getRightValues(); // full values for the right column
+
+        boolean holds;
+
+        // --- basic sanity checks ---
+        if (left == null || left.isEmpty()) {
+            this.getContext().getLog().warn(
+                    "Dependent column values are empty. Validation failed. left={}:{}",
+                    task.getLeftFile(), task.getLeftCol()
+            );
+            holds = false;
+        }
+        else if (rightValues == null || rightValues.length == 0) {
+            this.getContext().getLog().warn(
+                    "Referenced column values are empty. Validation failed. right={}:{}",
+                    task.getRightFile(), task.getRightCol()
+            );
+            holds = false;
+        }
+        else if (task.getLeftFile() == task.getRightFile()
+                && task.getLeftCol() == task.getRightCol()) {
+            // same column: skip (we don't want A ⊆ A)
+            holds = false;
+        }
+        // if dep has more distinct values than ref, subset can't hold
+        else if (left.size() > rightValues.length) {
+            holds = false;
+        }
+        else {
+            // --- build right set ONCE for this task (no caching) ---
+            // we assume rightValues is already distinct + trimmed + non-empty
+            int expectedSize = rightValues.length * 2; // rough over-allocation to avoid rehashing
+            java.util.HashSet<String> right = new java.util.HashSet<>(expectedSize);
+
+            for (String v : rightValues) {
+                if (v != null) {
+                    right.add(v);
+                }
+            }
+
+            // --- core idea: check if left ⊆ right ---
+            holds = true;
+            for (String v : left) {
+                if (!right.contains(v)) {
+                    holds = false;
+                    break;
+                }
+            }
+
+            if (holds) {
+                this.getContext().getLog().info(
+                        "IND found: Column '{}' (fileId={}) is a subset of column '{}' (fileId={}). sizes: dep={}, ref={}",
+                        task.getLeftCol(), task.getLeftFile(),
+                        task.getRightCol(), task.getRightFile(),
+                        left.size(), right.size()
+                );
+            }
+        }
+
+        DependencyMiner.IndCheckResult result =
+                new DependencyMiner.IndCheckResult(
+                        task.getLeftFile(), task.getLeftCol(),
+                        task.getRightFile(), task.getRightCol(),
+                        holds
+                );
+        this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(result, task.getMinerProxy()));
+        return this;
+    }
 }
