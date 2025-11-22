@@ -32,7 +32,7 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
     public static class TaskMessage implements Message {
         private static final long serialVersionUID = -4667745204456518160L;
         ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
-        int task; // legacy (ignored when chunk != null)
+        int task;
         DependencyMiner.PartitionChunk chunk;
         public TaskMessage(ActorRef<LargeMessageProxy.Message> minerProxy, DependencyMiner.PartitionChunk chunk) {
             this.dependencyMinerLargeMessageProxy = minerProxy; this.chunk = chunk; this.task = 0;
@@ -145,64 +145,10 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
         return this;
     }
 
-//    private Behavior<Message> handle(DependencyMiner.CheckIndTask task) {
-//        var leftKey = new ColKey(task.getLeftFile(), task.getLeftCol());
-//        var left = colSets.getOrDefault(leftKey, new java.util.HashSet<String>());
-//        java.util.HashSet<String> right = new java.util.HashSet<>(
-//                Math.max(16, (task.getRightValues() == null ? 0 : task.getRightValues().length))
-//        );
-//        if (task.getRightValues() != null) {
-//            for (String v : task.getRightValues()) {
-//                if (v == null) continue;
-//                v = v.trim();
-//                if (!v.isEmpty()) right.add(v);
-//            }
-//        }
-//        boolean holds;
-//
-//        if (left.isEmpty()) {
-//            this.getContext().getLog().warn(
-//                    "Dependent column values are empty. Validation failed. left={}:{}",
-//                    task.getLeftFile(), task.getLeftCol()
-//            );
-//            holds = false;
-//        }
-//        else if (right.isEmpty()) {
-//            this.getContext().getLog().warn(
-//                    "Referenced column values are empty. Validation failed. right={}:{}",
-//                    task.getRightFile(), task.getRightCol()
-//            );
-//            holds = false;
-//        }
-//        else if (task.getLeftFile() == task.getRightFile()
-//                && task.getLeftCol() == task.getRightCol()) {
-//            holds = false;
-//        }
-//        else {
-//            holds = right.containsAll(left);
-//            if (holds) {
-//                this.getContext().getLog().info(
-//                        "IND found: Column '{}' (fileId={}) is a subset of column '{}' (fileId={}). sizes: dep={}, ref={}",
-//                        task.getLeftCol(), task.getLeftFile(), task.getRightCol(), task.getRightFile(),
-//                        left.size(), right.size()
-//                );
-//            }
-//        }
-//        DependencyMiner.IndCheckResult result =
-//                new DependencyMiner.IndCheckResult(
-//                        task.getLeftFile(), task.getLeftCol(),
-//                        task.getRightFile(), task.getRightCol(),
-//                        holds
-//                );
-//        this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(result, task.getMinerProxy()));
-//        return this;
-//    }
-
     private Behavior<Message> handle(DependencyMiner.CheckIndTask task) {
         var leftKey  = new ColKey(task.getLeftFile(),  task.getLeftCol());
         var left     = colSets.get(leftKey);
         String[] rightValues = task.getRightValues();
-
         boolean holds;
 
         if (left == null || left.isEmpty()) {
@@ -230,13 +176,11 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
 
             int expectedSize = rightValues.length * 2;
             java.util.HashSet<String> right = new java.util.HashSet<>(expectedSize);
-
             for (String v : rightValues) {
                 if (v != null) {
                     right.add(v);
                 }
             }
-
             holds = true;
             for (String v : left) {
                 if (!right.contains(v)) {
@@ -244,7 +188,6 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
                     break;
                 }
             }
-
             if (holds) {
                 this.getContext().getLog().info(
                         "IND found: Column '{}' (fileId={}) is a subset of column '{}' (fileId={}). sizes: dep={}, ref={}",
@@ -254,7 +197,6 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
                 );
             }
         }
-
         DependencyMiner.IndCheckResult result =
                 new DependencyMiner.IndCheckResult(
                         task.getLeftFile(), task.getLeftCol(),
