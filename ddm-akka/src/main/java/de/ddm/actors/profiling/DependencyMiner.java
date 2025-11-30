@@ -477,36 +477,8 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         return new InclusionDependency(depFile, new String[]{depAttr}, refFile, new String[]{refAttr});
     }
 
-    //    private void redistributeColumnsToCanonicalOwnersAndDispatchIndChecks() {
-//        for (var e : columnValueSets.entrySet()) {
-//            ColKey k = e.getKey();
-//            java.util.Set<String> set = e.getValue();
-//            java.util.Set<ActorRef<DependencyWorker.Message>> ws = owners.get(k);
-//            if (ws == null || ws.isEmpty()) {
-//                continue;
-//            }
-//            ActorRef<DependencyWorker.Message> canonical = ws.iterator().next();
-//            canonicalOwners.put(k, canonical);
-//            String[] full = set.toArray(new String[0]);
-//            columnValues.put(k, full);
-//            int sampleLen = Math.min(SAMPLE_SIZE, full.length);
-//            if (sampleLen > 0) {
-//                String[] sample = new String[sampleLen];
-//                System.arraycopy(full, 0, sample, 0, sampleLen);
-//                columnSamples.put(k, sample);
-//            }
-//            ActorRef<LargeMessageProxy.Message> proxy = this.workerProxies.get(canonical);
-//            InstallColumnValues msg = new InstallColumnValues(k.f, k.c, full);
-//            this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(msg, proxy));
-//        }
-//        this.getContext().getLog().info(
-//                "Installed full column values on canonical workers for {} columns. Starting IND checks...",
-//                canonicalOwners.size()
-//        );
-//        dispatchIndChecks();
-//    }
     private void redistributeColumnsToCanonicalOwnersAndDispatchIndChecks() {
-        // If we somehow have no workers, just bail out gracefully.
+
         if (this.dependencyWorkers.isEmpty()) {
             this.getContext().getLog().warn(
                     "No workers registered for IND phase – skipping IND checks."
@@ -519,7 +491,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
             ColKey k = e.getKey();
             java.util.Set<String> set = e.getValue();
 
-            // Pick canonical worker in round robin among *all* currently registered workers
             ActorRef<DependencyWorker.Message> canonical =
                     this.dependencyWorkers.get(this.nextCanonicalIndex);
             this.nextCanonicalIndex =
@@ -529,8 +500,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
             String[] full = set.toArray(new String[0]);
             columnValues.put(k, full);
-
-            // Store a small sample of values for cheap pruning (your existing logic)
+            
             int sampleLen = Math.min(SAMPLE_SIZE, full.length);
             if (sampleLen > 0) {
                 String[] sample = new String[sampleLen];
