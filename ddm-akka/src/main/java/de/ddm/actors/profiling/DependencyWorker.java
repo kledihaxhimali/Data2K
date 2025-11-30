@@ -32,7 +32,7 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
     public static class TaskMessage implements Message {
         private static final long serialVersionUID = -4667745204456518160L;
         ActorRef<LargeMessageProxy.Message> dependencyMinerLargeMessageProxy;
-        int task; // legacy (ignored when chunk != null)
+        int task;
         DependencyMiner.PartitionChunk chunk;
         public TaskMessage(ActorRef<LargeMessageProxy.Message> minerProxy, DependencyMiner.PartitionChunk chunk) {
             this.dependencyMinerLargeMessageProxy = minerProxy; this.chunk = chunk; this.task = 0;
