@@ -98,6 +98,14 @@ public class DependencyWorker extends AbstractBehavior<DependencyWorker.Message>
     private Behavior<Message> handle(TaskMessage message) {
         if (message.getChunk() != null) {
             var ch  = message.getChunk();
+            // ✅ PRINT HERE — clean, simple, visible per worker terminal
+            this.getContext().getLog().info(
+                    "Received PARTITION chunk: fileId={} col={} seq={} taskId={}",
+                    ch.getFileId(),
+                    ch.getColumnIndex(),
+                    ch.getSeqNo(),
+                    ch.getTaskId()
+            );
             var key = new ColKey(ch.getFileId(), ch.getColumnIndex());
             var set = colSets.computeIfAbsent(key, k -> new java.util.HashSet<>(8192));
             String[] vals = ch.getValues();

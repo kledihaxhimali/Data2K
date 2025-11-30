@@ -325,8 +325,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
     private boolean sendNextChunkTo(ActorRef<DependencyWorker.Message> worker) {
         PartitionChunk picked = null;
-        boolean claimedNow = false;
-        boolean steal = false;
 
         Iterator<PartitionChunk> it = this.chunkQueue.iterator();
         while (it.hasNext()) {
@@ -345,16 +343,14 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
                     ws = new java.util.HashSet<>();
                     owners.put(key, ws);
                 }
-                if (ws.add(worker)) {
-                    claimedNow = true;
-                }
+                ws.add(worker);
                 picked = ch;
                 it.remove();
                 break;
             }
         }
 
-        if (picked == null && allFilesDone() && !this.chunkQueue.isEmpty()) {
+        if (picked == null && !this.chunkQueue.isEmpty()) {
             it = this.chunkQueue.iterator();
             if (it.hasNext()) {
                 PartitionChunk ch = it.next();
@@ -362,10 +358,11 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
                 ColKey key = new ColKey(ch.getFileId(), ch.getColumnIndex());
                 java.util.Set<ActorRef<DependencyWorker.Message>> ws =
                         owners.computeIfAbsent(key, k -> new java.util.HashSet<>());
-                steal = ws.add(worker);
+                ws.add(worker);
                 picked = ch;
             }
         }
+
         if (picked == null) {
             this.idleWorkers.addLast(worker);
             return false;
@@ -500,7 +497,7 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
             String[] full = set.toArray(new String[0]);
             columnValues.put(k, full);
-            
+
             int sampleLen = Math.min(SAMPLE_SIZE, full.length);
             if (sampleLen > 0) {
                 String[] sample = new String[sampleLen];
