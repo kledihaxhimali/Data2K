@@ -170,8 +170,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private static final int SAMPLE_SIZE = 64;
     private int nextCanonicalIndex = 0;
 
-
-
     ////////////////////
     // Actor Behavior //
     ////////////////////
@@ -325,7 +323,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
 
     private boolean sendNextChunkTo(ActorRef<DependencyWorker.Message> worker) {
         PartitionChunk picked = null;
-
         Iterator<PartitionChunk> it = this.chunkQueue.iterator();
         while (it.hasNext()) {
             PartitionChunk ch = it.next();
@@ -415,7 +412,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     private void dispatchIndChecks() {
         java.util.List<ColKey> cols = new java.util.ArrayList<>(columnValues.keySet());
         long checks = 0L;
-
         for (int i = 0; i < cols.size(); i++) {
             ColKey a = cols.get(i);
             String[] leftArr = columnValues.get(a);
@@ -475,7 +471,6 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
     }
 
     private void redistributeColumnsToCanonicalOwnersAndDispatchIndChecks() {
-
         if (this.dependencyWorkers.isEmpty()) {
             this.getContext().getLog().warn(
                     "No workers registered for IND phase – skipping IND checks."
@@ -487,34 +482,23 @@ public class DependencyMiner extends AbstractBehavior<DependencyMiner.Message> {
         for (var e : columnValueSets.entrySet()) {
             ColKey k = e.getKey();
             java.util.Set<String> set = e.getValue();
-
             ActorRef<DependencyWorker.Message> canonical =
                     this.dependencyWorkers.get(this.nextCanonicalIndex);
             this.nextCanonicalIndex =
                     (this.nextCanonicalIndex + 1) % this.dependencyWorkers.size();
-
             canonicalOwners.put(k, canonical);
-
             String[] full = set.toArray(new String[0]);
             columnValues.put(k, full);
-
             int sampleLen = Math.min(SAMPLE_SIZE, full.length);
             if (sampleLen > 0) {
                 String[] sample = new String[sampleLen];
                 System.arraycopy(full, 0, sample, 0, sampleLen);
                 columnSamples.put(k, sample);
             }
-
             ActorRef<LargeMessageProxy.Message> proxy = this.workerProxies.get(canonical);
             InstallColumnValues msg = new InstallColumnValues(k.f, k.c, full);
             this.largeMessageProxy.tell(new LargeMessageProxy.SendMessage(msg, proxy));
         }
-
-        this.getContext().getLog().info(
-                "Installed full column values on canonical workers for {} columns. Starting IND checks...",
-                canonicalOwners.size()
-        );
         dispatchIndChecks();
     }
-
 }
