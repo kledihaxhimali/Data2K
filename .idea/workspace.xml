@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="a5b188c7-4f58-438a-b4a5-fb9070d1b384" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/ddm-spark/data/employees.csv" beforeDir="false" afterPath="$PROJECT_DIR$/ddm-spark/data/employees.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ddm-spark/data/sample_libsvm_data.txt" beforeDir="false" afterPath="$PROJECT_DIR$/ddm-spark/data/sample_libsvm_data.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ddm-spark/data/students.csv" beforeDir="false" afterPath="$PROJECT_DIR$/ddm-spark/data/students.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ddm-spark/data/students2.csv" beforeDir="false" afterPath="$PROJECT_DIR$/ddm-spark/data/students2.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ddm-spark/data/toyExample.csv" beforeDir="false" afterPath="$PROJECT_DIR$/ddm-spark/data/toyExample.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ddm-spark/src/main/scala/de/ddm/DDMSpark.scala" beforeDir="false" afterPath="$PROJECT_DIR$/ddm-spark/src/main/scala/de/ddm/DDMSpark.scala" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/ddm-spark" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;kledihaxhimali&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/UMR-Big-Data-Analytics/ddm-spark.git&quot;,
+    &quot;accountId&quot;: &quot;dfcfe5a6-0d5f-4456-9e8c-aa31e0540da6&quot;
+  }
+}</component>
+  <component name="KubernetesApiPersistence">{}</component>
+  <component name="KubernetesApiProvider">{
+  &quot;isMigrated&quot;: true
+}</component>
+  <component name="MavenRunner">
+    <option name="jreName" value="21" />
+  </component>
+  <component name="ProjectCodeStyleSettingsMigration">
+    <option name="version" value="2" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 4
+}</component>
+  <component name="ProjectId" id="34N7AMxObCgLA3XrJBZi3hp0Afm" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/35567/Documents/GitHub/Data2K&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;sbt.project.settings.configurable&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\35567\Documents\GitHub\Data2K\ddm-spark\data" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\35567\Documents\GitHub\Data2K\ddm-spark\data" />
+      <recent name="C:\Users\35567\Documents\GitHub\Data2K\ddm-akka\Data" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="Unnamed" type="Application" factoryName="Application" nameIsGenerated="true">
+      <option name="ALTERNATIVE_JRE_PATH" value="11" />
+      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="true" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="JetRunConfigurationType">
+      <module name="Data2K" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="KotlinStandaloneScriptRunConfigurationType">
+      <module name="Data2K" />
+      <option name="filePath" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-9823dce3aa75-bf35d07a577b-intellij.indexing.shared.core-IU-252.27397.103" />
+        <option value="bundled-js-predefined-d6986cc7102b-3aa1da707db6-JavaScript-IU-252.27397.103" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="a5b188c7-4f58-438a-b4a5-fb9070d1b384" name="Changes" comment="" />
+      <created>1761042031292</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1761042031292</updated>
+      <workItem from="1761042032402" duration="2657000" />
+      <workItem from="1761474203186" duration="39000" />
+      <workItem from="1761474270700" duration="1322000" />
+      <workItem from="1761736450738" duration="57000" />
+      <workItem from="1762019415587" duration="663000" />
+      <workItem from="1762020473132" duration="6034000" />
+      <workItem from="1762190524799" duration="22000" />
+      <workItem from="1763051750116" duration="9708000" />
+      <workItem from="1763142861859" duration="4794000" />
+      <workItem from="1763229724152" duration="1447000" />
+      <workItem from="1763231871589" duration="2393000" />
+      <workItem from="1763234352420" duration="1641000" />
+      <workItem from="1763236581426" duration="1253000" />
+      <workItem from="1763286038867" duration="5517000" />
+      <workItem from="1763489432654" duration="70000" />
+      <workItem from="1764501711594" duration="6521000" />
+      <workItem from="1764607829175" duration="31000" />
+      <workItem from="1764757988425" duration="3045000" />
+      <workItem from="1765211198518" duration="32000" />
+      <workItem from="1765964759237" duration="4953000" />
+      <workItem from="1768239581776" duration="18000" />
+      <workItem from="1768926518528" duration="2765000" />
+      <workItem from="1768992969056" duration="614000" />
+      <workItem from="1768993607349" duration="1409000" />
+      <workItem from="1768997587019" duration="386000" />
+      <workItem from="1768998026245" duration="235000" />
+      <workItem from="1768998281669" duration="106000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
