@@ -62,13 +62,13 @@ object MSpark extends App {
     // Spark Tutorial
     //------------------------------------------------------------------------------------------------------------------
 
-    time(Tutorial.execute(spark))
+//    time(Tutorial.execute(spark))
 
     //------------------------------------------------------------------------------------------------------------------
     // Longest Common Substring Search
     //------------------------------------------------------------------------------------------------------------------
 
-    time(LongestCommonSubstring.discoverLCSs("students2", spark))
+//    time(LongestCommonSubstring.discoverLCSs("students2", spark))
 
     //------------------------------------------------------------------------------------------------------------------
     // Inclusion Dependency Discovery (Homework)
