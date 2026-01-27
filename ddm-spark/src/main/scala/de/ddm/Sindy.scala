@@ -32,7 +32,7 @@ object Sindy {
       } else {
         val stackExpr =
           s"stack(${cols.length}, " +
-            cols.map(c => s"'${tableName}.${c}', `${c}`").mkString(", ") +
+            cols.map(c => s"'${c}', ${c}").mkString(", ") +
             ") as (attribute, value)"
 
         df.selectExpr(stackExpr)
@@ -92,15 +92,21 @@ object Sindy {
   }
 
   private def createOutput(dataset: Dataset[(String, String)]): Unit = {
-    // Collect, stringify and sort INDs
-    val inds = dataset.collect().map(ind => ind._1 + " c " + ind._2).sorted
+    import dataset.sparkSession.implicits._
 
-    // Print results to the console
-    inds.foreach(println(_))
+    val lines: Array[String] =
+      dataset
+        .groupByKey(_._1) 
+        .mapGroups { case (dep, it) =>
+          val refs = it.map(_._2).toSet.toList.sorted
+          dep + " < " + refs.mkString(", ")
+        }
+        .collect()
+        .sorted
+    lines.foreach(println)
 
-    // Write results into a result file
     val writer = new BufferedWriter(new FileWriter(new File("result.txt")))
-    inds.foreach(s => writer.write(s + "\r\n"))
+    lines.foreach(s => writer.write(s + "\r\n"))
     writer.close()
   }
 }
